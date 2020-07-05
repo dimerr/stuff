@@ -1,0 +1,185 @@
+--- a/drivers/mtd/hifmc_spi_ids.h	2019-09-23 11:21:15.000000000 +0300
++++ b/drivers/mtd/hifmc_spi_ids.h	2020-07-05 10:18:24.974677111 +0300
+@@ -149,19 +149,19 @@
+ 
+ #define SET_READ_QUAD(_dummy_, _size_, _clk_) \
+     static struct spi_op read_quad_##_dummy_##_size_##_clk_ = { \
+-    SPI_IF_READ_QUAD, SPI_CMD_READ_QUAD, _dummy_, _size_, _clk_ }
++    SPI_IF_READ_DUAL, SPI_CMD_READ_DUAL, _dummy_, _size_, _clk_ }
+ 
+ #define SET_READ_QUAD4B(_dummy_, _size_, _clk_) \
+     static struct spi_op read_quad4b_##_dummy_##_size_##_clk_ = { \
+-    SPI_IF_READ_QUAD, SPI_CMD_READ_QUAD4B, _dummy_, _size_, _clk_ }
++    SPI_IF_READ_DUAL, SPI_CMD_READ_DUAL4B, _dummy_, _size_, _clk_ }
+ 
+ #define SET_READ_QUAD_ADDR(_dummy_, _size_, _clk_) \
+     static struct spi_op read_quad_addr_##_dummy_##_size_##_clk_ = { \
+-    SPI_IF_READ_QUAD_ADDR, SPI_CMD_READ_QUAD_ADDR, _dummy_, _size_, _clk_ }
++    SPI_IF_READ_DUAL_ADDR, SPI_CMD_READ_DUAL_ADDR, _dummy_, _size_, _clk_ }
+ 
+ #define SET_READ_QUAD_ADDR4B(_dummy_, _size_, _clk_) \
+     static struct spi_op read_quad_addr4b_##_dummy_##_size_##_clk_ = { \
+-    SPI_IF_READ_QUAD_ADDR, SPI_CMD_READ_QUAD_ADDR4B, _dummy_, _size_, _clk_ }
++    SPI_IF_READ_DUAL_ADDR, SPI_CMD_READ_DUAL_ADDR4B, _dummy_, _size_, _clk_ }
+ 
+ #ifdef CONFIG_DTR_MODE_SUPPORT
+ #define SET_READ_QUAD_DTR(_dummy_, _size_, _clk_) \
+@@ -205,19 +205,19 @@
+ 
+ #define SET_WRITE_QUAD(_dummy_, _size_, _clk_) \
+     static struct spi_op write_quad_##_dummy_##_size_##_clk_ = { \
+-    SPI_IF_WRITE_QUAD, SPI_CMD_WRITE_QUAD, _dummy_, _size_, _clk_ }
++    SPI_IF_WRITE_STD, SPI_CMD_WRITE_STD, _dummy_, _size_, _clk_ }
+ 
+ #define SET_WRITE_QUAD4B(_dummy_, _size_, _clk_) \
+     static struct spi_op write_quad4b_##_dummy_##_size_##_clk_ = { \
+-    SPI_IF_WRITE_QUAD, SPI_CMD_WRITE_QUAD4B, _dummy_, _size_, _clk_ }
++    SPI_IF_WRITE_STD, SPI_CMD_WRITE_STD4B, _dummy_, _size_, _clk_ }
+ 
+ #define SET_WRITE_QUAD_ADDR(_dummy_, _size_, _clk_) \
+     static struct spi_op write_quad_addr_##_dummy_##_size_##_clk_ = { \
+-SPI_IF_WRITE_QUAD_ADDR, SPI_CMD_WRITE_QUAD_ADDR, _dummy_, _size_, _clk_ }
++SPI_IF_WRITE_STD, SPI_CMD_WRITE_STD, _dummy_, _size_, _clk_ }
+ 
+ #define SET_WRITE_QUAD_ADDR4B(_dummy_, _size_, _clk_) \
+     static struct spi_op write_quad_addr4b_##_dummy_##_size_##_clk_ = { \
+-SPI_IF_WRITE_QUAD_ADDR, SPI_CMD_WRITE_QUAD_ADDR4B, _dummy_, _size_, _clk_ }
++SPI_IF_WRITE_STD, SPI_CMD_WRITE_STD, _dummy_, _size_, _clk_ }
+ 
+ /*****************************************************************************/
+ #define SET_ERASE_SECTOR_4K(_dummy_, _size_, _clk_) \
+--- a/drivers/mtd/spi/hifmc100/hifmc100.c	2019-09-23 11:21:15.000000000 +0300
++++ b/drivers/mtd/spi/hifmc100/hifmc100.c	2020-07-05 09:41:51.885265683 +0300
+@@ -888,6 +888,7 @@
+             }
+             return;
+         case MID_CFEON:
++        case MID_XTX:
+             if (host->level != lock_level_max)
+                 host->end_addr = chipsize - (erasesize
+                                              << (host->level - 1));
+@@ -917,6 +918,7 @@
+         case MID_GD:
+         case MID_ESMT:
+         case MID_CFEON:
++        case MID_XTX:
+         case MID_SPANSION:
+             host->bp_num = BP_NUM_3;
+             host->level = hifmc100_bp_to_level(host);
+@@ -996,6 +998,7 @@
+         case MID_GD:
+         case MID_ESMT:
+         case MID_CFEON:
++        case MID_XTX:
+         case MID_WINBOND:
+             val = hifmc100_handle_bp_rdsr_info(host, SPI_CMD_RDSR);
+             break;
+@@ -1056,7 +1059,7 @@
+     /* get the block protect level and B/T info in status register */
+     val = spi_general_get_flash_register(spi, cmd);
+     FMC_PR(BP_DBG, "Get Status Register[%#x]\n", val);
+-    if (mid == MID_CFEON) {
++    if (mid == MID_CFEON || MID_XTX) {
+         val &= SPI_BP_BOTTOM_RDSR_SET_0(host->bp_num);
+     } else {
+         val |= SPI_BP_BOTTOM_RDSR_SET_1(host->bp_num);
+--- a/include/configs/hi3516ev200.h	2019-09-23 11:21:16.000000000 +0300
++++ b/include/configs/hi3516ev200.h	2020-07-05 09:42:24.477468635 +0300
+@@ -173,7 +173,7 @@
+  */
+ 
+ /* Assume we boot with root on the seventh partition of eMMC */
+-#define CONFIG_BOOTARGS "console=ttyAMA0,115200n8 root=/dev/mtdblock2 rw"
++#define CONFIG_BOOTARGS "init=linuxrc mem=${osmem} console=ttyAMA0,115200 root=/dev/mtdblock1 rootfstype=squashfs"
+ #define CONFIG_SYS_USB_XHCI_MAX_ROOT_PORTS 2
+ #define BOOT_TARGET_DEVICES(func) \
+     func(USB, usb, 0) \
+@@ -182,16 +182,16 @@
+ #include <config_distro_bootcmd.h>
+ 
+ /*allow change env*/
+-#define  CONFIG_ENV_OVERWRITE
++/*#define  CONFIG_ENV_OVERWRITE*/
+ 
+ #define CONFIG_COMMAND_HISTORY
+ 
+ #endif
+ 
+ /* env in flash instead of CFG_ENV_IS_NOWHERE */
+-#define CONFIG_ENV_OFFSET       0x80000      /* environment starts here */
++#define CONFIG_ENV_OFFSET       0x30000      /* environment starts here */
+ 
+-#define CONFIG_ENV_SIZE         0x40000
++#define CONFIG_ENV_SIZE         0x10000
+ #define CONFIG_ENV_SECT_SIZE        0x10000
+ #define CONFIG_ENV_VARS_UBOOT_CONFIG
+ 
+@@ -266,5 +266,17 @@
+ /*#define CONFIG_AUDIO_ENABLE*/
+ 
+ /*#define CONFIG_EDMA_PLL_TRAINNING*/
++#define CONFIG_SD_BOOT 1
++#define CONFIG_SPI_BOOT 1
++#define CONFIG_BOOTDELAY 1
++#define CONFIG_KERNEL_LOAD_ADDR 0x42000000
++#define CONFIG_CMD_TFTPPUT 1
++#define CONFIG_CMD_FAT 1
++#define CONFIG_CMD_FS_GENERIC 1
++#define CONFIG_SPI_BLOCK_PROTECT 1
++#define CONFIG_NETMASK 255.255.255.0
++#define CONFIG_GATEWAYIP 192.168.1.1
++#define CONFIG_SERVERIP 192.168.1.1
++#define CONFIG_IPADDR 192.168.1.10
+ 
+ #endif /* __HI3516EV200_H */
+--- a/include/configs/hi3516ev300.h	2019-09-23 11:21:16.000000000 +0300
++++ b/include/configs/hi3516ev300.h	2020-07-05 09:42:44.613593888 +0300
+@@ -171,7 +171,7 @@
+  */
+ 
+ /* Assume we boot with root on the seventh partition of eMMC */
+-#define CONFIG_BOOTARGS "console=ttyAMA0,115200n8 root=/dev/mtdblock2 rw"
++#define CONFIG_BOOTARGS "init=linuxrc mem=${osmem} console=ttyAMA0,115200 root=/dev/mtdblock1 rootfstype=squashfs"
+ #define CONFIG_SYS_USB_XHCI_MAX_ROOT_PORTS 2
+ #define BOOT_TARGET_DEVICES(func) \
+     func(USB, usb, 0) \
+@@ -185,9 +185,9 @@
+ #define CONFIG_COMMAND_HISTORY
+ 
+ /* env in flash instead of CFG_ENV_IS_NOWHERE */
+-#define CONFIG_ENV_OFFSET       0x80000      /* environment starts here */
++#define CONFIG_ENV_OFFSET       0x30000      /* environment starts here */
+ 
+-#define CONFIG_ENV_SIZE         0x40000
++#define CONFIG_ENV_SIZE         0x10000
+ #define CONFIG_ENV_SECT_SIZE        0x10000
+ #define CONFIG_ENV_VARS_UBOOT_CONFIG
+ 
+@@ -260,5 +260,17 @@
+ /*#define CONFIG_AUDIO_ENABLE*/
+ 
+ /*#define CONFIG_EDMA_PLL_TRAINNING*/
++#define CONFIG_SD_BOOT 1
++#define CONFIG_SPI_BOOT 1
++#define CONFIG_BOOTDELAY 1
++#define CONFIG_KERNEL_LOAD_ADDR 0x42000000
++#define CONFIG_CMD_TFTPPUT 1
++#define CONFIG_CMD_FAT 1
++#define CONFIG_CMD_FS_GENERIC 1
++#define CONFIG_SPI_BLOCK_PROTECT 1
++#define CONFIG_NETMASK 255.255.255.0
++#define CONFIG_GATEWAYIP 192.168.1.1
++#define CONFIG_SERVERIP 192.168.1.1
++#define CONFIG_IPADDR 192.168.1.10
+ 
+ #endif /* __HI3516EV300_H */
+--- a/include/spi_flash.h	2019-09-23 11:21:16.000000000 +0300
++++ b/include/spi_flash.h	2020-07-05 09:37:42.039698733 +0300
+@@ -57,6 +57,7 @@
+ #define MID_CFEON       0x1c    /* CFeon Manufacture ID */
+ #define MID_MICRON      0x20    /* Micron Manufacture ID */
+ #define MID_PARAGON     0xe0    /* Paragon Manufacture ID */
++#define MID_XTX         0x0b    /* XTX Manufacture ID */
+ 
+ #ifndef CONFIG_SF_DEFAULT_SPEED
+ # define CONFIG_SF_DEFAULT_SPEED	1000000
